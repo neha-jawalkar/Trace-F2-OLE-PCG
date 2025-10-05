@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <omp.h>
 
 #include "common.h"
 #include "modular_bench.h"
@@ -9,23 +10,26 @@
 #include "gr64_bench.h"
 #include "gr64_trace_bench.h"
 
-void gr64_trace_bench_pcg(size_t n, size_t c, size_t t, struct PCG_Time *pcg_time) {
-
-    clock_t start_time = clock();
+void gr64_trace_bench_pcg(size_t n, size_t c, size_t t, struct PCG_Time *pcg_time)
+{
+    double start_time = omp_get_wtime();
 
     struct Param *param = xcalloc(1, sizeof(struct Param));
     const size_t m = 2;
     init_gr64_bench_params(param, n, c, t, m);
-    
+
     struct FFT_GR64_Trace_A *fft_gr64_trace_a = xcalloc(1, sizeof(struct FFT_GR64_Trace_A));
     init_FFT_GR64_Trace_A(param, fft_gr64_trace_a);
     sample_gr64_trace_a_and_tensor(param, fft_gr64_trace_a);
 
     size_t dpf_block_size = param->dpf_block_size;
     size_t poly_size = param->poly_size;
-    if (t*t*dpf_block_size == poly_size) {
+    if (t * t * dpf_block_size == poly_size)
+    {
         printf("OK\n");
-    } else {
+    }
+    else
+    {
         printf("Incorrect\n");
         exit(-1);
     }
@@ -33,40 +37,45 @@ void gr64_trace_bench_pcg(size_t n, size_t c, size_t t, struct PCG_Time *pcg_tim
     struct GR64_Trace_Prod *prod = xcalloc(1, sizeof(struct GR64_Trace_Prod));
     init_gr64_trace_prod(param, prod);
 
-    clock_t start_expand_time = clock();
+    double start_expand_time = omp_get_wtime();
+
     run_gr64_trace_prod(param, prod, fft_gr64_trace_a->fft_a_tensor_maps);
 
-    double end_expand_time = clock();
-    double time_taken = ((double)(end_expand_time - start_expand_time)) / (CLOCKS_PER_SEC / 1000.0); // ms
-    printf("Eval time (total) %f ms\n", time_taken);
+    double end_expand_time = omp_get_wtime();
+    double time_taken = ((double)(end_expand_time - start_expand_time));
+    printf("Eval time (total) %lf s\n", time_taken);
     printf("DONE Benchmarking PCG evaluation\n\n");
 
-    free_gr64_trace_prod(param, prod);
-    free_FFT_GR64_Trace_A(param, fft_gr64_trace_a);
-    free(param);
-    clock_t end_time = clock();
-    pcg_time->pp_time = ((double)(start_expand_time-start_time))/(CLOCKS_PER_SEC/1000.0);
+    // free_gr64_trace_prod(param, prod);
+    // free_FFT_GR64_Trace_A(param, fft_gr64_trace_a);
+    // free(param);
+    double end_time = omp_get_wtime();
+    pcg_time->pp_time = ((double)(start_expand_time - start_time));
     pcg_time->expand_time = time_taken;
-    pcg_time->total_time = ((double)(end_time-start_time))/(CLOCKS_PER_SEC / 1000.0);
+    pcg_time->total_time = ((double)(end_time - start_time));
 }
 
-void init_FFT_GR64_Trace_A(const struct Param *param, struct FFT_GR64_Trace_A *fft_gr64_trace_a) {
+void init_FFT_GR64_Trace_A(const struct Param *param, struct FFT_GR64_Trace_A *fft_gr64_trace_a)
+{
     size_t poly_size = param->poly_size;
     size_t c = param->c;
     size_t m = param->m;
-    struct GR64 **fft_a = xcalloc(c, sizeof(void*));
-    for (size_t i = 0; i < c; ++i) {
+    struct GR64 **fft_a = xcalloc(c, sizeof(void *));
+    for (size_t i = 0; i < c; ++i)
+    {
         fft_a[i] = xcalloc(poly_size, sizeof(struct GR64));
     }
-    struct GR64 **fft_a_maps = xcalloc(c, sizeof(void*));
-    for (size_t i = 0; i < c; ++i) {
+    struct GR64 **fft_a_maps = xcalloc(c, sizeof(void *));
+    for (size_t i = 0; i < c; ++i)
+    {
         fft_a_maps[i] = xcalloc(poly_size, sizeof(struct GR64));
     }
 
-    struct GR64 **fft_a_tensor_maps = xcalloc(c*c, sizeof(void*));
-    for(size_t i = 0; i < c*c; ++i) {
+    struct GR64 **fft_a_tensor_maps = xcalloc(c * c, sizeof(void *));
+    for (size_t i = 0; i < c * c; ++i)
+    {
         // m indicates the automorphisms
-        fft_a_tensor_maps[i] = xcalloc(m*poly_size, sizeof(struct GR64));
+        fft_a_tensor_maps[i] = xcalloc(m * poly_size, sizeof(struct GR64));
     }
 
     fft_gr64_trace_a->fft_a = fft_a;
@@ -74,153 +83,182 @@ void init_FFT_GR64_Trace_A(const struct Param *param, struct FFT_GR64_Trace_A *f
     fft_gr64_trace_a->fft_a_tensor_maps = fft_a_tensor_maps;
 }
 
-void init_FFT_GR64_d3_Trace_A(const struct Param *param, struct FFT_GR64_D3_Trace_A *fft_gr64_d3_trace_a) {
+void init_FFT_GR64_d3_Trace_A(const struct Param *param, struct FFT_GR64_D3_Trace_A *fft_gr64_d3_trace_a)
+{
 
     size_t poly_size = param->poly_size;
     size_t c = param->c;
     size_t m = param->m;
-    struct GR64_D3 **fft_a = xcalloc(m*c, sizeof(void*));
-    for (size_t i = 0; i < m*c; ++i) {
+    struct GR64_D3 **fft_a = xcalloc(m * c, sizeof(void *));
+    for (size_t i = 0; i < m * c; ++i)
+    {
         fft_a[i] = xcalloc(poly_size, sizeof(struct GR64_D3));
     }
 
-    struct GR64_D3 **fft_a_tensor = xcalloc(m*c*c, sizeof(void*));
-    for(size_t i = 0; i < m*c*c; ++i) {
+    struct GR64_D3 **fft_a_tensor = xcalloc(m * c * c, sizeof(void *));
+    for (size_t i = 0; i < m * c * c; ++i)
+    {
         // m indicates the automorphisms
-        fft_a_tensor[i] = xcalloc(m*c*c*poly_size, sizeof(struct GR64_D3));
+        fft_a_tensor[i] = xcalloc(m * c * c * poly_size, sizeof(struct GR64_D3));
     }
     fft_gr64_d3_trace_a->fft_a = fft_a;
     fft_gr64_d3_trace_a->fft_a_tensor = fft_a_tensor;
 }
 
-
-void init_FFT_GR64_d4_Trace_A(const struct Param *param, struct FFT_GR64_D4_Trace_A *fft_gr64_d4_trace_a) {
+void init_FFT_GR64_d4_Trace_A(const struct Param *param, struct FFT_GR64_D4_Trace_A *fft_gr64_d4_trace_a)
+{
 
     size_t poly_size = param->poly_size;
     size_t c = param->c;
     size_t m = param->m;
-    struct GR64_D4 **fft_a = xcalloc(m*c, sizeof(void*));
-    for (size_t i = 0; i < m*c; ++i) {
+    struct GR64_D4 **fft_a = xcalloc(m * c, sizeof(void *));
+    for (size_t i = 0; i < m * c; ++i)
+    {
         fft_a[i] = xcalloc(poly_size, sizeof(struct GR64_D4));
     }
 
-    struct GR64_D4 **fft_a_tensor = xcalloc(m*c*c, sizeof(void*));
-    for(size_t i = 0; i < m*c*c; ++i) {
+    struct GR64_D4 **fft_a_tensor = xcalloc(m * c * c, sizeof(void *));
+    for (size_t i = 0; i < m * c * c; ++i)
+    {
         // m indicates the automorphisms
-        fft_a_tensor[i] = xcalloc(m*c*c*poly_size, sizeof(struct GR64_D4));
+        fft_a_tensor[i] = xcalloc(m * c * c * poly_size, sizeof(struct GR64_D4));
     }
     fft_gr64_d4_trace_a->fft_a = fft_a;
     fft_gr64_d4_trace_a->fft_a_tensor = fft_a_tensor;
 }
 
-
-void free_FFT_GR64_Trace_A(const struct Param *param, struct FFT_GR64_Trace_A *fft_gr64_trace_a) {
+void free_FFT_GR64_Trace_A(const struct Param *param, struct FFT_GR64_Trace_A *fft_gr64_trace_a)
+{
     size_t c = param->c;
 
-    for (size_t i = 0; i < c; ++i) {
+    for (size_t i = 0; i < c; ++i)
+    {
         free(fft_gr64_trace_a->fft_a[i]);
     }
     // Free fft_a
     free(fft_gr64_trace_a->fft_a);
 
-    for (size_t i = 0; i < c; ++i) {
+    for (size_t i = 0; i < c; ++i)
+    {
         free(fft_gr64_trace_a->fft_a_maps[i]);
     }
     free(fft_gr64_trace_a->fft_a_maps);
 
     // Free the nested arrays in fft_a_tensor
-    for (size_t i = 0; i < c * c; ++i) {
+    for (size_t i = 0; i < c * c; ++i)
+    {
         free(fft_gr64_trace_a->fft_a_tensor_maps[i]);
     }
     free(fft_gr64_trace_a->fft_a_tensor_maps);
     free(fft_gr64_trace_a);
 }
 
-void free_FFT_GR64_d3_Trace_A(const struct Param *param, struct FFT_GR64_D3_Trace_A *fft_gr64_d3_trace_a) {
+void free_FFT_GR64_d3_Trace_A(const struct Param *param, struct FFT_GR64_D3_Trace_A *fft_gr64_d3_trace_a)
+{
     size_t c = param->c;
     size_t m = param->m;
 
-    for (size_t i = 0; i < m*c; ++i) {
+    for (size_t i = 0; i < m * c; ++i)
+    {
         free(fft_gr64_d3_trace_a->fft_a[i]);
     }
     // Free fft_a
     free(fft_gr64_d3_trace_a->fft_a);
 
     // Free the nested arrays in fft_a_tensor
-    for (size_t i = 0; i < c*c*m; ++i) {
+    for (size_t i = 0; i < c * c * m; ++i)
+    {
         free(fft_gr64_d3_trace_a->fft_a_tensor[i]);
     }
     free(fft_gr64_d3_trace_a->fft_a_tensor);
-    
+
     free(fft_gr64_d3_trace_a);
 }
 
-void free_FFT_GR64_d4_Trace_A(const struct Param *param, struct FFT_GR64_D4_Trace_A *fft_gr64_d4_trace_a) {
+void free_FFT_GR64_d4_Trace_A(const struct Param *param, struct FFT_GR64_D4_Trace_A *fft_gr64_d4_trace_a)
+{
     size_t c = param->c;
     size_t m = param->m;
 
-    for (size_t i = 0; i < m*c; ++i) {
+    for (size_t i = 0; i < m * c; ++i)
+    {
         free(fft_gr64_d4_trace_a->fft_a[i]);
     }
     // Free fft_a
     free(fft_gr64_d4_trace_a->fft_a);
 
     // Free the nested arrays in fft_a_tensor
-    for (size_t i = 0; i < c*c*m; ++i) {
+    for (size_t i = 0; i < c * c * m; ++i)
+    {
         free(fft_gr64_d4_trace_a->fft_a_tensor[i]);
     }
     free(fft_gr64_d4_trace_a->fft_a_tensor);
-    
+
     free(fft_gr64_d4_trace_a);
 }
 
-void sample_gr64_trace_a_and_tensor(const struct Param *param, struct FFT_GR64_Trace_A *fft_gr64_trace_a) {
+void sample_gr64_trace_a_and_tensor(const struct Param *param, struct FFT_GR64_Trace_A *fft_gr64_trace_a)
+{
     const size_t poly_size = param->poly_size;
     const size_t c = param->c;
     struct GR64 **fft_a = fft_gr64_trace_a->fft_a;
     struct GR64 **fft_a_maps = fft_gr64_trace_a->fft_a_maps;
     struct GR64 **fft_a_tensor_maps = fft_gr64_trace_a->fft_a_tensor_maps;
 
-    // randomize a first
-    for (size_t i = 1; i < c; ++i) {
+// randomize a first
+#pragma omp parallel for
+    for (size_t i = 1; i < c; ++i)
+    {
         RAND_bytes((uint8_t *)fft_a[i], sizeof(struct GR64) * poly_size);
     }
-    // make first a the identity polynomial (in FFT space) i.e., all 1s
-    for (size_t i = 0; i < poly_size; ++i) {
+// make first a the identity polynomial (in FFT space) i.e., all 1s
+#pragma omp parallel for
+    for (size_t i = 0; i < poly_size; ++i)
+    {
         fft_a[0][i].c0 = 1;
         fft_a[0][i].c1 = 0;
     }
 
     // compute \sigma^1(a)
-    for (size_t i = 0; i < c; ++i) {
-        for (size_t j = 0; j < poly_size; j++) {
+#pragma omp parallel for collapse(2)
+    for (size_t i = 0; i < c; ++i)
+    {
+        for (size_t j = 0; j < poly_size; j++)
+        {
             struct GR64 *cur_a = &fft_a[i][j];
             struct GR64 *cur_a_maps = &fft_a_maps[i][j];
-            cur_a_maps->c0 = cur_a->c0-cur_a->c1;
+            cur_a_maps->c0 = cur_a->c0 - cur_a->c1;
             cur_a_maps->c1 = -cur_a->c1;
         }
     }
-    // compute ai*\sigma^0(aj) and ai*\sigma^1(aj)
-    for (size_t i = 0; i < c; ++i) {
-        for (size_t j = 0; j < c; ++j) {
-            for (size_t k = 0; k < poly_size; ++k) {
+// compute ai*\sigma^0(aj) and ai*\sigma^1(aj)
+#pragma omp parallel for collapse(3)
+    for (size_t i = 0; i < c; ++i)
+    {
+        for (size_t j = 0; j < c; ++j)
+        {
+            for (size_t k = 0; k < poly_size; ++k)
+            {
                 // the two polynomials in fft_a_tensor_maps is crossed
-                mult_gr64(&fft_a[i][k], &fft_a[j][k], &fft_a_tensor_maps[i*c+j][k]);
-                mult_gr64(&fft_a[i][k], &fft_a_maps[j][k], &fft_a_tensor_maps[i*c+j][k+poly_size]);
+                mult_gr64(&fft_a[i][k], &fft_a[j][k], &fft_a_tensor_maps[i * c + j][k]);
+                mult_gr64(&fft_a[i][k], &fft_a_maps[j][k], &fft_a_tensor_maps[i * c + j][k + poly_size]);
             }
         }
     }
 }
 
-void trace_gr64_FFT_polys(const struct Param *param, const struct GR64 *src, uint64_t *rlt) {
+void trace_gr64_FFT_polys(const struct Param *param, const struct GR64 *src, uint64_t *rlt)
+{
 
     const size_t poly_size = param->poly_size;
-    for (size_t i = 0; i < poly_size; ++i) {
-        rlt[i] = 2*src[i].c0-src[i].c1;
+    for (size_t i = 0; i < poly_size; ++i)
+    {
+        rlt[i] = 2 * src[i].c0 - src[i].c1;
     }
 }
 
-void init_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod) {
+void init_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod)
+{
 
     size_t c = param->c;
     size_t t = param->t;
@@ -229,12 +267,12 @@ void init_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *pro
     size_t poly_size = param->poly_size;
     struct Keys *keys = xcalloc(1, sizeof(struct Keys));
     sample_gr64_DPF_keys(param, keys);
-    struct GR64 *polys = xcalloc(c*c*t*t*m*dpf_block_size, sizeof(struct GR64));
-    struct GR64 *poly_buf = xcalloc(c*c*t*t*m*dpf_block_size, sizeof(struct GR64));
-    struct GR64 *z_poly0 = xcalloc(t*t*dpf_block_size, sizeof(struct GR64));
-    struct GR64 *z_poly1 = xcalloc(t*t*dpf_block_size, sizeof(struct GR64));
-    uint64_t *rlt0 = xcalloc(t*t*dpf_block_size, sizeof(uint64_t));
-    uint64_t *rlt1 = xcalloc(t*t*dpf_block_size, sizeof(uint64_t));
+    struct GR64 *polys = xcalloc(c * c * t * t * m * dpf_block_size, sizeof(struct GR64));
+    struct GR64 *poly_buf = xcalloc(c * c * t * t * m * dpf_block_size, sizeof(struct GR64));
+    struct GR64 *z_poly0 = xcalloc(t * t * dpf_block_size, sizeof(struct GR64));
+    struct GR64 *z_poly1 = xcalloc(t * t * dpf_block_size, sizeof(struct GR64));
+    uint64_t *rlt0 = xcalloc(t * t * dpf_block_size, sizeof(uint64_t));
+    uint64_t *rlt1 = xcalloc(t * t * dpf_block_size, sizeof(uint64_t));
 
     uint128_t *shares = xcalloc(dpf_block_size, sizeof(uint128_t));
     uint128_t *cache = xcalloc(dpf_block_size, sizeof(uint128_t));
@@ -250,7 +288,8 @@ void init_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *pro
     prod->cache = cache;
 }
 
-void free_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod) {
+void free_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod)
+{
     free_gr64_DPF_keys(param, prod->keys);
     free(prod->polys);
     free(prod->poly_buf);
@@ -263,8 +302,8 @@ void free_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *pro
     free(prod);
 }
 
-void run_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod, struct GR64 **fft_a_tensor_maps) {
-
+void run_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod, struct GR64 **fft_a_tensor_maps)
+{
     struct Keys *keys = prod->keys;
     struct GR64 *polys = prod->polys;
     struct GR64 *poly_buf = prod->poly_buf;

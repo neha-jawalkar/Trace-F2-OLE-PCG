@@ -1,7 +1,7 @@
 TARGET = ./bin/pcg
 CC = gcc 
-CFLAGS += -std=c99 -O3 -I./src -I./include -I./libs/fft/include -I./libs/gf64/include -I./libs/gf128/include -I./libs/base-ary-dpf/include -I/usr/include/openssl/
-LDFLAGS = -march=native -lcrypto -lssl -lm -maes -ffast-math
+CFLAGS += -std=c99 -O3 -I./src -I./include -I./libs/fft/include -I./libs/gf64/include -I./libs/gf128/include -I./libs/base-ary-dpf/include -I/usr/include/openssl/ -fopenmp
+LDFLAGS = -march=native -lcrypto -lssl -lm -maes -ffast-math -fopenmp
 
 # Define source files and filter out library files 
 FFT_SRC = $(filter-out ./libs/fft/src/test.c, $(wildcard ./libs/fft/src/*.c))
