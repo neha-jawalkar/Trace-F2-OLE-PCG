@@ -361,7 +361,6 @@ void evaluate_gr64_DPF(const struct Param *param, const struct Keys *keys, struc
         {
             for (size_t v = 0; v < m; ++v)
             {
-                // printf("Thread %d.\n", omp_get_thread_num());
                 for (size_t k = 0; k < t; ++k)
                 {
                     for (size_t l = 0; l < t; ++l)
@@ -487,24 +486,22 @@ void sum_gr64_FFT_polys_special(const struct Param *param, struct GR64 *poly_buf
     const size_t m = param->m;
     const size_t poly_size = param->poly_size;
 
+#pragma omp parallel for collapse(4)
     for (size_t i = 0; i < c; ++i)
     {
         for (size_t j = 0; j < c; ++j)
         {
             for (size_t w = 0; w < m; ++w)
             {
-                struct GR64 *poly = &poly_buf[((i * c + j) * m + w) * poly_size];
-                if (w == 0)
+                for (size_t k = 0; k < poly_size; ++k)
                 {
-                    for (size_t k = 0; k < poly_size; ++k)
+                    struct GR64 *poly = &poly_buf[((i * c + j) * m + w) * poly_size];
+                    if (w == 0)
                     {
                         z_poly[k].c0 += poly[k].c1 - poly[k].c0;
                         z_poly[k].c1 += (-poly[k].c0);
                     }
-                }
-                else
-                {
-                    for (size_t k = 0; k < poly_size; ++k)
+                    else
                     {
                         z_poly[k].c0 += poly[k].c0;
                         z_poly[k].c1 += poly[k].c1;

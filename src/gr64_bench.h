@@ -71,6 +71,8 @@ void multiply_gr64_FFT(const struct Param *param, struct GR64 **a_polys, const s
 
 void sum_gr64_FFT_polys(const struct Param *param, struct GR64 *poly_buf, struct GR64 *z_poly);
 void sum_gr64_FFT_polys_special(const struct Param *param, struct GR64 *poly_buf, struct GR64 *z_poly);
+void sum_gr64_FFT_polys_2(const struct Param *param, struct GR64 *poly_buf, struct GR64 *z_poly0, struct GR64 *z_poly1);
+
 
 void add_gr64_D4(const struct GR64_D4 *a, const struct GR64_D4 *b, struct GR64_D4 *t);
 void mult_gr64_D4_list(const struct GR64_D4 *a, const struct GR64_D4 *b, struct GR64_D4 *t, size_t len);

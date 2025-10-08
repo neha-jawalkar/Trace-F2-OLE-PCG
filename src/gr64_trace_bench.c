@@ -249,11 +249,24 @@ void sample_gr64_trace_a_and_tensor(const struct Param *param, struct FFT_GR64_T
 
 void trace_gr64_FFT_polys(const struct Param *param, const struct GR64 *src, uint64_t *rlt)
 {
-
     const size_t poly_size = param->poly_size;
+#pragma omp parallel for
     for (size_t i = 0; i < poly_size; ++i)
     {
         rlt[i] = 2 * src[i].c0 - src[i].c1;
+    }
+}
+
+void trace_gr64_FFT_polys_2(const struct Param *param, const struct GR64 *src0, const struct GR64 *src1, uint64_t *rlt0, uint64_t *rlt1)
+{
+    const size_t poly_size = param->poly_size;
+#pragma omp parallel for
+    for (size_t i = 0; i < 2 * poly_size; ++i)
+    {
+        if(i < poly_size)
+            rlt0[i] = 2 * src0[i].c0 - src0[i].c1;
+        else
+            rlt1[i] = 2 * src1[i].c0 - src1[i].c1;
     }
 }
 
@@ -302,6 +315,49 @@ void free_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *pro
     free(prod);
 }
 
+void sum_gr64_FFT_polys_2(const struct Param *param, struct GR64 *poly_buf, struct GR64 *z_poly0, struct GR64 *z_poly1)
+{
+    double start = omp_get_wtime();
+
+    const size_t c = param->c;
+    const size_t t = param->t;
+    const size_t n = param->n;
+    const size_t m = param->m;
+    const size_t poly_size = param->poly_size;
+
+#pragma omp parallel for collapse(4)
+    for (size_t i = 0; i < c; ++i)
+    {
+        for (size_t j = 0; j < c; ++j)
+        {
+            for (size_t w = 0; w < m; ++w)
+            {
+                for (size_t k = 0; k < poly_size; ++k)
+                {
+                    struct GR64 *poly = &poly_buf[((i * c + j) * m + w) * poly_size];
+                    z_poly0[k].c0 += poly[k].c0;
+                    z_poly0[k].c1 += poly[k].c1;
+                    if (w == 0)
+                    {
+                        z_poly1[k].c0 += poly[k].c1 - poly[k].c0;
+                        z_poly1[k].c1 += (-poly[k].c0);
+                    }
+                    else
+                    {
+                        z_poly1[k].c0 += poly[k].c0;
+                        z_poly1[k].c1 += poly[k].c1;
+                    }
+                }
+            }
+        }
+    }
+
+    double end = omp_get_wtime();
+    double time_taken = ((double)(end - start));
+    printf("Sum %f s\n", time_taken);
+}
+
+
 void run_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod, struct GR64 **fft_a_tensor_maps)
 {
     struct Keys *keys = prod->keys;
@@ -317,8 +373,9 @@ void run_gr64_trace_prod(const struct Param *param, struct GR64_Trace_Prod *prod
     evaluate_gr64_DPF(param, keys, polys, shares, cache);
     convert_gr64_to_FFT(param, polys);
     multiply_gr64_FFT(param, fft_a_tensor_maps, polys, poly_buf);
-    sum_gr64_FFT_polys(param, poly_buf, z_poly0);
-    sum_gr64_FFT_polys_special(param, poly_buf, z_poly1);
+    sum_gr64_FFT_polys_2(param, poly_buf, z_poly0, z_poly1);
+    // sum_gr64_FFT_polys_special(param, poly_buf, z_poly1);
+    // trace_gr64_FFT_polys_2(param, z_poly0, z_poly1, rlt0, rlt1);
     trace_gr64_FFT_polys(param, z_poly0, rlt0);
     trace_gr64_FFT_polys(param, z_poly1, rlt1);
 }
