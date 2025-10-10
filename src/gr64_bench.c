@@ -8,7 +8,9 @@
 #include "modular_test.h"
 #include "dpf.h"
 #include "fft.h"
+
 #define DPF_MSG_LEN 1
+#define LOG_BATCH_SIZE 6
 
 void gr64_bench_pcg(size_t n, size_t c, size_t t, struct PCG_Time *pcg_time)
 {
@@ -354,35 +356,123 @@ void evaluate_gr64_DPF(const struct Param *param, const struct Keys *keys, struc
     const size_t dpf_block_size = param->dpf_block_size;
     const size_t m = param->m;
 
-#pragma omp parallel for collapse(5)
-    for (size_t i = 0; i < c; ++i)
-    {
-        for (size_t j = 0; j < c; ++j)
-        {
-            for (size_t v = 0; v < m; ++v)
-            {
-                for (size_t k = 0; k < t; ++k)
-                {
-                    for (size_t l = 0; l < t; ++l)
-                    {
-                        const size_t poly_index = (i * c + j) * m + v;
-                        struct GR64 *poly = &polys[poly_index * t * t * dpf_block_size];
+    const size_t size = keys->dpf_keys_A[0]->size;
+    const size_t num_leaves = ipow(3, size);
 
-                        const size_t key_index = poly_index * t * t + k * t + l;
-                        struct GR64 *poly_block = &poly[(k * t + l) * dpf_block_size];
-                        struct DPFKey *dpf_key = keys->dpf_keys_A[key_index];
-                        // TODO: test the DPF evaluation results
-                        DPFFullDomainEval(dpf_key, cache, shares);
-                        copy_gr64_block(poly_block, shares, dpf_block_size);
+    uint128_t *output = shares;
+    uint128_t *tmp;
+    if (size % 2 == 1)
+    {
+        tmp = cache;
+        cache = output;
+        output = tmp;
+    }
+
+    size_t num_batches, batch_size, offset = 0;
+    size_t max_batch_size = ipow(3, LOG_BATCH_SIZE);
+    size_t num_nodes = 1;
+    memcpy(&output[0], &keys->dpf_keys_A[0]->k[0], 16); // output[0] is the start seed
+
+    for (int lvl = 0; lvl < size; lvl++, offset += batch_size, num_nodes *= 3)
+    {
+        if (lvl < LOG_BATCH_SIZE)
+        {
+            batch_size = num_nodes;
+            num_batches = 1;
+        }
+        else
+        {
+            batch_size = max_batch_size;
+            num_batches = num_nodes / max_batch_size;
+        }
+
+#pragma omp parallel for collapse(7)
+        for (size_t i = 0; i < c; ++i)
+        {
+            for (size_t j = 0; j < c; ++j)
+            {
+                for (size_t v = 0; v < m; ++v)
+                {
+                    for (size_t k = 0; k < t; ++k)
+                    {
+                        for (size_t l = 0; l < t; ++l)
+                        {
+                            for (int z = 0; z < 3; z++)
+                            {
+                                for (size_t batch = 0; batch < num_batches; batch++)
+                                {
+                                    // for (int w = 0; w < batch_size; w++)
+                                    // {
+                                    const size_t poly_index = (i * c + j) * m + v;
+                                    struct GR64 *poly = &polys[poly_index * t * t * dpf_block_size];
+
+                                    const size_t key_index = poly_index * t * t + k * t + l;
+                                    struct GR64 *poly_block = &poly[(k * t + l) * dpf_block_size];
+                                    struct DPFKey *dpf_key = keys->dpf_keys_A[key_index];
+                                    const uint8_t *k = dpf_key->k;
+                                    struct PRFKeys *prf_keys = dpf_key->prf_keys;
+
+                                    const uint128_t *sCW = (uint128_t *)&k[16 * z * size + 16];
+                                    // inner loop variables related to node expansion
+                                    // and correction word application
+                                    // batching variables related to chunking of inner loop processing
+                                    // for the purpose of maximizing cache hits
+                                    EVP_CIPHER_CTX *prf_key = z == 0 ? prf_keys->prf_key0 : (z == 1 ? prf_keys->prf_key1 : prf_keys->prf_key2);
+                                    PRFBatchEval(prf_key, &output[offset], &cache[(num_nodes * z) + offset], batch_size);
+                                    size_t idx = (num_nodes * z) + offset;
+                                    uint8_t cb = output[idx] & 1; // gets the LSB of the parent
+                                    cache[idx] ^= (cb * sCW[i]);
+                                    // }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+        tmp = output;
+        output = cache;
+        cache = tmp;
     }
+
+//     struct DPFKey *dpf_key = keys->dpf_keys_A[0];
+//     const size_t output_length = dpf_key->msg_len * num_leaves;
+//     const size_t msg_len = dpf_key->msg_len;
+//     const uint8_t *k = dpf_key->k;
+//     uint128_t *outputCW = (uint128_t *)&k[16 * 3 * size + 16];
+//     // ExtendOutput(prf_keys, output, cache, num_leaves, output_length);
+//     // output_size = num_leaves;
+//     // new_output_size = output_length;
+
+//     size_t factor = output_length / num_leaves;
+
+// #pragma omp parallel for collapse(2)
+//     for (size_t i = 0; i < num_leaves; i++)
+//     {
+//         for (size_t j = 0; j < factor; j++)
+//             cache[i * factor + j] = output[i] ^ j;
+//     }
+
+//     PRFBatchEval(prf_keys->prf_key_ext, &cache[0], &output[0], output_length);
+
+// // size_t j = 0;
+// #pragma omp parallel for
+//     for (size_t i = 0; i < num_leaves; i++)
+//     {
+//         // TODO: a bit hacky, assumes that cache[i*msg_len] = old_output[i]
+//         // which is the case internally in ExtendOutput. It would be good
+//         // to remove this assumption however using memcpy is costly...
+
+//         if (cache[i * msg_len] & 1) // parent control bit
+//         {
+//             for (size_t j = 0; j < msg_len; j++)
+//                 output[i * msg_len + j] ^= outputCW[j];
+//         }
+//     }
+//     copy_gr64_block(poly_block, shares, dpf_block_size);
 
     double end = omp_get_wtime();
     double time_taken = ((double)(end - start));
-    //  / (CLOCKS_PER_SEC / 1000.0); // ms
     printf("DPF full eval %f s\n", time_taken);
 }
 
