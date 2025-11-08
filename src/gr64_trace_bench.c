@@ -249,12 +249,19 @@ void sample_gr64_trace_a_and_tensor(const struct Param *param, struct FFT_GR64_T
 
 void trace_gr64_FFT_polys(const struct Param *param, const struct GR64 *src, uint64_t *rlt)
 {
+    double start = omp_get_wtime();
+    
     const size_t poly_size = param->poly_size;
 #pragma omp parallel for
     for (size_t i = 0; i < poly_size; ++i)
     {
         rlt[i] = 2 * src[i].c0 - src[i].c1;
     }
+    
+    double end = omp_get_wtime();
+    double time_taken = ((double)(end - start));
+    printf("Trace %f s\n", time_taken);
+
 }
 
 void trace_gr64_FFT_polys_2(const struct Param *param, const struct GR64 *src0, const struct GR64 *src1, uint64_t *rlt0, uint64_t *rlt1)
